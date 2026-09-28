@@ -100,12 +100,22 @@
 
   .card-list-item{
     display:flex;justify-content:space-between;gap:10px;align-items:flex-start;
-    padding:13px 4px;border-bottom:1px solid rgba(255,255,255,0.07);
+    padding:13px 4px 13px 10px;border-bottom:1px solid rgba(255,255,255,0.07);
+    border-left:3px solid transparent;
   }
+  .card-list-item[data-rating="0"]{border-left-color:var(--err);}
+  .card-list-item[data-rating="1"]{border-left-color:var(--hard);}
+  .card-list-item[data-rating="2"]{border-left-color:var(--good);}
+  .card-list-item[data-rating="3"]{border-left-color:var(--easy);}
   .card-list-item .front{font-size:14px;color:var(--off);}
   .card-list-item .due{font-size:12px;color:var(--muted);margin-top:3px;}
   .card-list-item .del{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px;}
   .card-list-item .del:hover{color:var(--err);}
+  .rating-tag{font-size:11px;padding:2px 8px;border-radius:20px;white-space:nowrap;display:inline-block;margin-top:4px;}
+  .rating-tag.r0{background:rgba(180,71,47,0.18);color:var(--err);}
+  .rating-tag.r1{background:rgba(201,138,62,0.18);color:var(--hard);}
+  .rating-tag.r2{background:rgba(63,143,110,0.18);color:var(--good);}
+  .rating-tag.r3{background:rgba(62,124,151,0.18);color:var(--easy);}
   .danger-link{display:block;margin:26px auto 0;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:8px;}
   .danger-link:hover{color:var(--err);}
 
@@ -584,11 +594,16 @@ function renderMain(){
   if(cards.length === 0){
     list.innerHTML = `<div class="empty" style="margin-top:20px;">Adicione cartões manualmente ou gere com IA a partir de um texto.</div>`;
   }else{
+    const ratingLabels = ['Errei','Difícil','Bom','Fácil'];
     cards.slice().sort((a,b)=>(a.due||0)-(b.due||0)).forEach(c=>{
       const item = document.createElement('div');
       item.className = 'card-list-item';
+      if(c.lastRating !== undefined && c.lastRating !== null) item.dataset.rating = c.lastRating;
       const dueTxt = (c.due||0) <= Date.now() ? 'pronto para revisar' : 'revisar em ' + daysUntil(c.due) + 'd';
-      item.innerHTML = `<div><div class="front">${escapeHtml(c.front)}</div><div class="due">${dueTxt}</div></div>
+      const tagHtml = (c.lastRating !== undefined && c.lastRating !== null)
+        ? `<span class="rating-tag r${c.lastRating}">${ratingLabels[c.lastRating]}</span>`
+        : '';
+      item.innerHTML = `<div><div class="front">${escapeHtml(c.front)}</div><div class="due">${dueTxt}</div>${tagHtml}</div>
         <button class="del" onclick="deleteCard('${c.id}')">excluir</button>`;
       list.appendChild(item);
     });
@@ -713,6 +728,7 @@ function previewInterval(card, rating){
   return d <= 0 ? '<1d' : d + 'd';
 }
 function scheduleCard(card, rating){
+  card.lastRating = rating;
   if(rating === 0){
     card.reps = 0;
     card.interval = 0;
