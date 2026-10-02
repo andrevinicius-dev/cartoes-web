@@ -130,6 +130,39 @@
   .agenda-front{font-size:14px;color:var(--off);}
   .agenda-meta{font-size:12px;color:var(--muted);margin-top:2px;}
   .agenda-empty{font-size:13px;color:var(--muted);padding:4px 0 2px;}
+  .chip-filter-row{display:flex;gap:8px;overflow-x:auto;margin:14px 0 4px;scrollbar-width:none;}
+  .chip-filter-row::-webkit-scrollbar{display:none;}
+  .card-list-info{flex:1;cursor:pointer;border-radius:8px;}
+  .card-list-info:hover{background:rgba(255,255,255,0.04);}
+  .view-card-box{margin-top:10px;}
+  .view-card-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;}
+  .view-card-text{font-size:15px;color:var(--off);line-height:1.5;background:rgba(255,255,255,0.04);border-radius:10px;padding:12px 14px;}
+
+  /* Menu lateral */
+  .drawer-backdrop{position:fixed;inset:0;background:rgba(10,14,16,0.6);display:none;z-index:70;}
+  .drawer-backdrop.active{display:block;}
+  .drawer{
+    position:fixed;top:0;left:0;bottom:0;width:78%;max-width:280px;background:var(--desk-2);
+    z-index:71;transform:translateX(-100%);transition:transform .25s ease;
+    padding:calc(18px + var(--sat)) 14px calc(18px + var(--sab));overflow-y:auto;
+    box-shadow:4px 0 24px rgba(0,0,0,0.4);
+  }
+  .drawer.active{transform:translateX(0);}
+  .drawer-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:0 6px;}
+  .drawer-item{
+    display:flex;align-items:center;justify-content:space-between;padding:13px 10px;border-radius:10px;
+    cursor:pointer;color:var(--off);font-size:15px;
+  }
+  .drawer-item:hover{background:rgba(255,255,255,0.06);}
+  .drawer-chevron{color:var(--muted);transition:transform .2s;display:inline-block;}
+  .drawer-chevron.open{transform:rotate(90deg);}
+  .drawer-sub{max-height:0;overflow:hidden;transition:max-height .22s ease;padding-left:10px;}
+  .drawer-sub.open{max-height:260px;}
+  .drawer-subitem{
+    display:block;width:100%;text-align:left;background:none;border:none;color:var(--muted);
+    font-size:14px;padding:10px 10px;cursor:pointer;border-radius:8px;
+  }
+  .drawer-subitem:hover{background:rgba(255,255,255,0.05);color:var(--off);}
 
   /* Study mode */
   #study{position:fixed;inset:0;background:var(--desk);display:none;flex-direction:column;z-index:50;}
@@ -214,13 +247,31 @@
 </head>
 <body>
 
+<!-- Menu lateral -->
+<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+<nav class="drawer" id="drawer">
+  <div class="drawer-head">
+    <span class="serif" style="font-size:18px;">Menu</span>
+    <button class="icon-btn" onclick="closeDrawer()" aria-label="Fechar menu">✕</button>
+  </div>
+  <div class="drawer-item" onclick="toggleDrawerAgenda()">
+    <span>🗓 Agenda de revisões</span><span class="drawer-chevron" id="drawerAgendaChevron">›</span>
+  </div>
+  <div class="drawer-sub" id="drawerAgendaSub">
+    <button class="drawer-subitem" onclick="openAgendaFromDrawer('today')">Disponível agora</button>
+    <button class="drawer-subitem" onclick="openAgendaFromDrawer('7d')">Até 7 dias</button>
+    <button class="drawer-subitem" onclick="openAgendaFromDrawer('30d')">Até 30 dias</button>
+    <button class="drawer-subitem" onclick="openAgendaFromDrawer('more')">Mais de 30 dias</button>
+  </div>
+  <div class="drawer-item" onclick="closeDrawer(); openSettings();">⚙ Configurações</div>
+</nav>
+
 <div id="app">
   <header class="topbar">
     <h1>Cart<span>õ</span>es</h1>
     <div class="top-actions">
-      <button class="icon-btn" onclick="openAgenda()" aria-label="Agenda de revisões" title="Agenda de revisões">🗓</button>
       <button class="icon-btn" id="syncBtn" data-state="pending" onclick="sync()" aria-label="Sincronizar com a nuvem" title="Sincronizar">☁</button>
-      <button class="icon-btn" onclick="openSettings()" aria-label="Configurações">⚙</button>
+      <button class="icon-btn" onclick="openDrawer()" aria-label="Abrir menu" title="Menu">☰</button>
     </div>
   </header>
 
@@ -619,8 +670,8 @@ function renderMain(){
       const tagHtml = (c.lastRating !== undefined && c.lastRating !== null)
         ? `<span class="rating-tag r${c.lastRating}">${ratingLabels[c.lastRating]}</span>`
         : '';
-      item.innerHTML = `<div><div class="front">${escapeHtml(c.front)}</div><div class="due">${dueTxt}</div>${tagHtml}</div>
-        <button class="del" onclick="deleteCard('${c.id}')">excluir</button>`;
+      item.innerHTML = `<div class="card-list-info" onclick="viewCard('${c.id}')"><div class="front">${escapeHtml(c.front)}</div><div class="due">${dueTxt}</div>${tagHtml}</div>
+        <button class="del" onclick="event.stopPropagation(); deleteCard('${c.id}')">excluir</button>`;
       list.appendChild(item);
     });
   }
@@ -763,35 +814,83 @@ function rate(rating){
   showCurrentCard();
 }
 
-/* ---------- Agenda de revisões (todos os baralhos) ---------- */
-function openAgenda(){
+/* ---------- Menu lateral ---------- */
+function openDrawer(){ $('drawer').classList.add('active'); $('drawerBackdrop').classList.add('active'); }
+function closeDrawer(){ $('drawer').classList.remove('active'); $('drawerBackdrop').classList.remove('active'); }
+function toggleDrawerAgenda(){
+  $('drawerAgendaSub').classList.toggle('open');
+  $('drawerAgendaChevron').classList.toggle('open');
+}
+function openAgendaFromDrawer(period){
+  closeDrawer();
+  openAgenda(period);
+}
+
+/* ---------- Agenda de revisões (todos os baralhos, com filtro por período) ---------- */
+const AGENDA_PERIODS = [
+  { key: 'today', label: 'Disponível' },
+  { key: '7d', label: '7 dias' },
+  { key: '30d', label: '30 dias' },
+  { key: 'more', label: '+30 dias' }
+];
+let agendaPeriod = 'today';
+function computeAgendaGroups(){
   const now = Date.now(), day = 86400000;
   const deckName = id => { const d = S.decks.find(x => x.id === id); return d ? d.name : ''; };
-  const groups = [
-    { label: 'Hoje', items: [] },
-    { label: 'Até 7 dias', items: [] },
-    { label: 'Até 30 dias', items: [] },
-    { label: 'Mais de 30 dias', items: [] }
-  ];
+  const g = { today: [], '7d': [], '30d': [], more: [] };
   S.cards.filter(c => !c.deleted && liveDecks().some(d => d.id === c.deck_id)).forEach(c => {
     const due = c.due || 0;
-    const idx = due <= now ? 0 : due <= now + 7 * day ? 1 : due <= now + 30 * day ? 2 : 3;
-    groups[idx].items.push(c);
+    const key = due <= now ? 'today' : due <= now + 7 * day ? '7d' : due <= now + 30 * day ? '30d' : 'more';
+    g[key].push(c);
   });
-  groups.forEach(g => g.items.sort((a, b) => (a.due || 0) - (b.due || 0)));
-  const html = groups.map(g => {
-    const head = `<div class="agenda-head"><span>${g.label}</span><span class="agenda-count">${g.items.length}</span></div>`;
-    if(!g.items.length) return `<div class="agenda-group">${head}<div class="agenda-empty">Nenhum cartão</div></div>`;
-    const rows = g.items.map(c => {
-      const txt = (c.due || 0) <= now ? 'pronto para revisar' : 'em ' + daysUntil(c.due) + 'd';
-      return `<div class="agenda-item"><div class="agenda-front">${escapeHtml(c.front)}</div><div class="agenda-meta">${escapeHtml(deckName(c.deck_id))} · ${txt}</div></div>`;
-    }).join('');
-    return `<div class="agenda-group">${head}${rows}</div>`;
-  }).join('');
+  Object.values(g).forEach(arr => arr.sort((a, b) => (a.due || 0) - (b.due || 0)));
+  return { g, deckName, now };
+}
+function openAgenda(period){
+  agendaPeriod = period || 'today';
   showSheet(`
     <h3>Agenda de revisões</h3>
-    <div class="sub">Todos os seus baralhos, agrupados por quando cada cartão volta a aparecer.</div>
-    <div class="agenda-wrap">${html}</div>
+    <div class="sub">Todos os seus baralhos — escolha o período.</div>
+    <div class="chip-filter-row" id="agendaChips"></div>
+    <div class="agenda-wrap" id="agendaBody"></div>
+    <div class="row-btns"><button class="btn ghost" onclick="closeSheet()">Fechar</button></div>
+  `);
+  renderAgenda();
+}
+function setAgendaPeriod(key){ agendaPeriod = key; renderAgenda(); }
+function renderAgenda(){
+  const { g, deckName, now } = computeAgendaGroups();
+  const chips = $('agendaChips');
+  if(chips){
+    chips.innerHTML = AGENDA_PERIODS.map(p =>
+      `<button class="chip${p.key === agendaPeriod ? ' active' : ''}" style="flex:0 0 auto;" onclick="setAgendaPeriod('${p.key}')">${p.label} (${g[p.key].length})</button>`
+    ).join('');
+  }
+  const body = $('agendaBody');
+  if(!body) return;
+  const items = g[agendaPeriod] || [];
+  body.innerHTML = items.length
+    ? items.map(c => {
+        const txt = (c.due || 0) <= now ? 'pronto para revisar' : 'em ' + daysUntil(c.due) + 'd';
+        return `<div class="agenda-item"><div class="agenda-front">${escapeHtml(c.front)}</div><div class="agenda-meta">${escapeHtml(deckName(c.deck_id))} · ${txt}</div></div>`;
+      }).join('')
+    : `<div class="agenda-empty">Nenhum cartão nesse período.</div>`;
+}
+
+/* ---------- Ver um cartão específico, sem precisar estudar o baralho todo ---------- */
+function viewCard(id){
+  const c = S.cards.find(x => x.id === id && !x.deleted);
+  if(!c) return;
+  const dueTxt = (c.due || 0) <= Date.now() ? 'pronto para revisar' : 'revisar em ' + daysUntil(c.due) + 'd';
+  showSheet(`
+    <h3>Cartão</h3>
+    <div class="sub">${dueTxt}</div>
+    <div class="view-card-box">
+      <div class="view-card-label">Pergunta</div>
+      <div class="view-card-text">${escapeHtml(c.front)}</div>
+      <div class="view-card-label" style="margin-top:16px;">Resposta</div>
+      <div class="view-card-text">${escapeHtml(c.back)}</div>
+    </div>
     <div class="row-btns"><button class="btn ghost" onclick="closeSheet()">Fechar</button></div>
   `);
 }
