@@ -135,6 +135,7 @@
   .card-list-info{flex:1;cursor:pointer;border-radius:8px;}
   .card-list-info:hover{background:rgba(255,255,255,0.04);}
   .view-card-box{margin-top:10px;}
+  .attach-open{display:block;text-align:center;text-decoration:none;margin-top:16px;}
   .view-card-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;}
   .view-card-text{font-size:15px;color:var(--off);line-height:1.5;background:rgba(255,255,255,0.04);border-radius:10px;padding:12px 14px;}
 
@@ -478,6 +479,7 @@ const cardFromRow = r => ({
   id: r.id, deck_id: r.deck_id, front: r.front, back: r.back,
   due: Number(r.due), interval: Number(r.interval_days), reps: Number(r.reps), ease: Number(r.ease),
   lastRating: (r.last_rating === null || r.last_rating === undefined) ? undefined : Number(r.last_rating),
+  attachment: r.attachment_url || '',
   deleted: !!r.deleted, updated: Number(r.updated_at), dirty: false
 });
 async function pull(){
@@ -504,6 +506,7 @@ const cardRow = c => ({
   id: c.id, user_id: userId, deck_id: c.deck_id, front: c.front, back: c.back,
   due: Math.round(c.due || 0), interval_days: Math.round(c.interval || 0), reps: Math.round(c.reps || 0),
   ease: c.ease || 2.5, last_rating: (c.lastRating === undefined || c.lastRating === null) ? null : c.lastRating,
+  attachment_url: c.attachment || null,
   deleted: !!c.deleted, updated_at: c.updated
 });
 async function pushList(table, list, toRow){
@@ -670,7 +673,7 @@ function renderMain(){
       const tagHtml = (c.lastRating !== undefined && c.lastRating !== null)
         ? `<span class="rating-tag r${c.lastRating}">${ratingLabels[c.lastRating]}</span>`
         : '';
-      item.innerHTML = `<div class="card-list-info" onclick="viewCard('${c.id}')"><div class="front">${escapeHtml(c.front)}</div><div class="due">${dueTxt}</div>${tagHtml}</div>
+      item.innerHTML = `<div class="card-list-info" onclick="viewCard('${c.id}')"><div class="front">${escapeHtml(c.front)}</div><div class="due">${dueTxt}${c.attachment ? ' · 📎 anexo' : ''}</div>${tagHtml}</div>
         <button class="del" onclick="event.stopPropagation(); deleteCard('${c.id}')">excluir</button>`;
       list.appendChild(item);
     });
@@ -718,22 +721,37 @@ function openNewCard(){
     <textarea id="cardFront" placeholder="O que você quer perguntar?" style="min-height:70px;"></textarea>
     <label for="cardBack">Verso (resposta)</label>
     <textarea id="cardBack" placeholder="A resposta" style="min-height:70px;"></textarea>
+    <label for="cardLink">Link do anexo (opcional)</label>
+    <input type="text" id="cardLink" placeholder="Cole o link de uma imagem ou documento" autocapitalize="none" spellcheck="false">
+    <div class="err-box" id="cardErr"></div>
     <div class="row-btns">
       <button class="btn ghost" onclick="closeSheet()">Cancelar</button>
       <button class="btn solid" onclick="createCard()">Adicionar</button>
     </div>
   `);
 }
+function normalizeUrl(u){
+  u = String(u || '').trim();
+  if(!u) return '';
+  if(!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  try{ const p = new URL(u); return (p.protocol === 'http:' || p.protocol === 'https:') ? p.href : ''; }catch(e){ return ''; }
+}
 function createCard(){
   const front = $('cardFront').value.trim();
   const back = $('cardBack').value.trim();
   if(!front || !back) return;
-  addCardToDeck(currentDeckId, front, back);
+  const rawLink = $('cardLink').value.trim();
+  const link = normalizeUrl(rawLink);
+  if(rawLink && !link){
+    const e = $('cardErr'); e.textContent = 'Esse link não parece válido. Confira ou deixe em branco.'; e.classList.add('show');
+    return;
+  }
+  addCardToDeck(currentDeckId, front, back, link);
   save(); closeSheet(); render();
 }
-function addCardToDeck(deckId, front, back){
+function addCardToDeck(deckId, front, back, attachment){
   if(!deckId) return;
-  const card = { id: uid(), deck_id: deckId, front, back, due: 0, interval: 0, reps: 0, ease: 2.5, deleted: false, updated: 0, dirty: true };
+  const card = { id: uid(), deck_id: deckId, front, back, attachment: attachment || '', due: 0, interval: 0, reps: 0, ease: 2.5, deleted: false, updated: 0, dirty: true };
   touch(card);
   S.cards.push(card);
 }
@@ -891,8 +909,30 @@ function viewCard(id){
       <div class="view-card-label" style="margin-top:16px;">Resposta</div>
       <div class="view-card-text">${escapeHtml(c.back)}</div>
     </div>
-    <div class="row-btns"><button class="btn ghost" onclick="closeSheet()">Fechar</button></div>
+    ${c.attachment ? `<a class="btn solid attach-open" href="${escapeHtml(c.attachment)}" target="_blank" rel="noopener noreferrer">📎 Abrir anexo</a>` : ''}
+    <label for="viewLink">Link do anexo (opcional)</label>
+    <input type="text" id="viewLink" value="${escapeHtml(c.attachment || '')}" placeholder="Cole o link de uma imagem ou documento" autocapitalize="none" spellcheck="false">
+    <div class="err-box" id="viewErr"></div>
+    <div class="row-btns">
+      <button class="btn ghost" onclick="closeSheet()">Fechar</button>
+      <button class="btn solid" onclick="saveCardLink('${c.id}')">Salvar link</button>
+    </div>
   `);
+}
+function saveCardLink(id){
+  const c = S.cards.find(x => x.id === id && !x.deleted);
+  if(!c) return;
+  const rawLink = $('viewLink').value.trim();
+  const link = normalizeUrl(rawLink);
+  if(rawLink && !link){
+    const e = $('viewErr'); e.textContent = 'Esse link não parece válido. Confira ou deixe em branco para remover.'; e.classList.add('show');
+    return;
+  }
+  c.attachment = link;
+  touch(c);
+  save();
+  render();
+  viewCard(id);
 }
 
 /* ---------- Janelas (bottom sheet) ---------- */
@@ -959,7 +999,7 @@ async function exportBackup(){
     exportedAt: new Date().toISOString(),
     decks: liveDecks().map(d => ({
       id: d.id, name: d.name,
-      cards: liveCards(d.id).map(c => ({ id: c.id, front: c.front, back: c.back, due: c.due, interval: c.interval, reps: c.reps, ease: c.ease }))
+      cards: liveCards(d.id).map(c => ({ id: c.id, front: c.front, back: c.back, due: c.due, interval: c.interval, reps: c.reps, ease: c.ease, attachment: c.attachment || '' }))
     })),
     settings: { model: S.settings.model }
   };
@@ -994,7 +1034,7 @@ function importBackup(file){
         (d.cards || []).forEach(c => {
           if(!c || !c.front || !c.back) return;
           const card = {
-            id: uid(), deck_id: deck.id, front: String(c.front), back: String(c.back),
+            id: uid(), deck_id: deck.id, front: String(c.front), back: String(c.back), attachment: normalizeUrl(c.attachment),
             due: Number(c.due) || 0, interval: parseInt(c.interval, 10) || 0, reps: parseInt(c.reps, 10) || 0,
             ease: Number(c.ease) || 2.5, deleted: false, updated: 0, dirty: true
           };
