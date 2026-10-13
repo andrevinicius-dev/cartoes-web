@@ -290,7 +290,7 @@
   </div>
   <div class="study-stage" id="studyStage"></div>
   <div class="rate-row" id="rateRow">
-    <button class="rate-btn again" onclick="rate(0)">Errei<small>&lt;1d</small></button>
+    <button class="rate-btn again" onclick="rate(0)">Errei<small id="againPreview"></small></button>
     <button class="rate-btn hard" onclick="rate(1)">Difícil<small id="hardPreview"></small></button>
     <button class="rate-btn good" onclick="rate(2)">Bom<small id="goodPreview"></small></button>
     <button class="rate-btn easy" onclick="rate(3)">Fácil<small id="easyPreview"></small></button>
@@ -794,17 +794,28 @@ function showCurrentCard(){
     </div>`;
 }
 function flipCard(){
-  if(flipped) return;
-  flipped = true;
   const c = currentRatingCard;
-  $('studyStage').innerHTML = `<div class="flashcard">
-      <div class="back-label">RESPOSTA</div>
-      <div>${escapeHtml(c.back)}</div>
-    </div>`;
-  $('hardPreview').textContent = previewInterval(c, 1);
-  $('goodPreview').textContent = previewInterval(c, 2);
-  $('easyPreview').textContent = previewInterval(c, 3);
-  $('rateRow').classList.add('show');
+  if(!c) return;
+  flipped = !flipped;           // toque alterna entre pergunta e resposta quantas vezes quiser
+  if(flipped){
+    $('studyStage').innerHTML = `<div class="flashcard" style="padding-bottom:46px;" onclick="flipCard()">
+        <div class="back-label">RESPOSTA</div>
+        <div>${escapeHtml(c.back)}</div>
+        <div class="hint">toque para voltar à pergunta</div>
+      </div>`;
+    $('againPreview').textContent = previewInterval(c, 0);
+    $('hardPreview').textContent = previewInterval(c, 1);
+    $('goodPreview').textContent = previewInterval(c, 2);
+    $('easyPreview').textContent = previewInterval(c, 3);
+    $('rateRow').classList.add('show');
+  }else{
+    // volta para a pergunta; os botões de nota continuam visíveis, pois você já viu a resposta
+    $('studyStage').innerHTML = `<div class="flashcard" style="padding-bottom:46px;" onclick="flipCard()">
+        <div class="back-label">PERGUNTA</div>
+        <div>${escapeHtml(c.front)}</div>
+        <div class="hint">toque para ver a resposta</div>
+      </div>`;
+  }
 }
 function previewInterval(card, rating){
   const tmp = Object.assign({}, card);
@@ -813,17 +824,12 @@ function previewInterval(card, rating){
   return d <= 0 ? '<1d' : d + 'd';
 }
 function scheduleCard(card, rating){
-  // Espaçamento fixo em 2 etapas: cartão novo que você erra volta em 7 dias;
-  // qualquer cartão que já passou dessa primeira revisão (ou que você já acertou
-  // de primeira) passa a ser revisado sempre a cada 30 dias, acertando ou errando.
+  // Prazo fixo por botão, em toda revisão: Errei 1 dia, Difícil 7 dias, Bom e Fácil 30 dias.
+  const days = rating === 0 ? 1 : rating === 1 ? 7 : 30;
   card.lastRating = rating;
   card.reps = (card.reps || 0) + 1;
-  if((card.interval || 0) < 7){
-    card.interval = (rating === 0) ? 7 : 30;
-  }else{
-    card.interval = 30;
-  }
-  card.due = Date.now() + card.interval * 86400000;
+  card.interval = days;
+  card.due = Date.now() + days * 86400000;
 }
 function rate(rating){
   const card = S.cards.find(c => c.id === currentRatingCard.id);
